@@ -1,0 +1,91 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:
+
+#  Added permissions required for OIDC authentication.
+permissions:
+  id-token: write  # Allows GitHub Actions to request an OIDC token
+  contents: read   # Allows GitHub Actions to checkout repository code
+
+jobs:
+
+  # ==========================
+  # JOB 1: TERRAFORM PLAN
+  # ==========================
+
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # NEW: Authenticate GitHub Actions with AWS using OIDC
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+
+
+  # ==========================
+  # JOB 2: TERRAFORM APPLY
+  # ==========================
+
+  apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+
+    needs: plan
+
+   
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # NEW: Authenticate AGAIN using OIDC.
+      # Each job gets a separate runner, so authentication
+      # from the plan job does not carry over to this job.
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
