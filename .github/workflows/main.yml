@@ -29,6 +29,18 @@ jobs:
           echo "Repository: $GITHUB_REPOSITORY"
           echo "Branch: $GITHUB_REF"
           echo "Event: $GITHUB_EVENT_NAME"
+
+      - name: Debug OIDC
+        run: |
+          TOKEN=$(curl -sH "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          python3 -c "
+          import sys,base64,json
+          p=sys.argv[1].split('.')[1]
+          p+='='*(-len(p)%4)
+          c=json.loads(base64.urlsafe_b64decode(p))
+          print(json.dumps({k:c[k] for k in ('sub','aud','iss')},indent=2))
+          " "$TOKEN"
       # NEW: Authenticate GitHub Actions with AWS using OIDC
       - name: Configure AWS Credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v4
